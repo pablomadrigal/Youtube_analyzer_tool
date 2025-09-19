@@ -7,6 +7,18 @@ from datetime import datetime
 from dataclasses import dataclass
 
 
+class TranscriptLine(BaseModel):
+    """Individual transcript line with timing information."""
+    start: float = Field(..., description="Start time in seconds")
+    duration: float = Field(..., description="Duration in seconds")
+    text: str = Field(..., description="Transcript text")
+
+
+class TranscriptUnavailableError(Exception):
+    """Exception raised when transcript is unavailable."""
+    pass
+
+
 class AnalysisOptions(BaseModel):
     """Options for video analysis."""
     include_markdown: bool = Field(default=False, description="Include Markdown fields in response")

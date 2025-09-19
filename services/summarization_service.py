@@ -106,7 +106,8 @@ class SummarizationService:
             for attempt in range(self.config.max_retries):
                 try:
                     response = await asyncio.wait_for(
-                        completion(
+                        asyncio.to_thread(
+                            completion,
                             model=self.config.provider,
                             messages=[
                                 {"role": "user", "content": prompt}

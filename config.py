@@ -27,6 +27,9 @@ class ServiceConfig(BaseModel):
     use_whisper_fallback: bool = Field(default=True, description="Enable Whisper fallback for transcript fetching")
     whisper_max_audio_duration: int = Field(default=3600, description="Maximum audio duration for Whisper (seconds)")
     whisper_chunk_duration: int = Field(default=600, description="Chunk duration for long audio files (seconds)")
+    whisper_model: str = Field(default="base", description="Whisper model to use")
+    whisper_device: str = Field(default="cpu", description="Device to run Whisper on")
+    whisper_compute_type: str = Field(default="int8", description="Compute type for Whisper")
     
     # Custom model configurations
     custom_model_config: Dict[str, Any] = Field(default_factory=dict, description="Custom model configurations")
@@ -46,6 +49,9 @@ def load_config() -> ServiceConfig:
         use_whisper_fallback=os.getenv("USE_WHISPER_FALLBACK", "true").lower() == "true",
         whisper_max_audio_duration=int(os.getenv("WHISPER_MAX_AUDIO_DURATION", "3600")),
         whisper_chunk_duration=int(os.getenv("WHISPER_CHUNK_DURATION", "600")),
+        whisper_model=os.getenv("WHISPER_MODEL", "base"),
+        whisper_device=os.getenv("WHISPER_DEVICE", "cpu"),
+        whisper_compute_type=os.getenv("WHISPER_COMPUTE_TYPE", "int8"),
         custom_model_config=eval(os.getenv("CUSTOM_MODEL_CONFIG", "{}"))
     )
 
