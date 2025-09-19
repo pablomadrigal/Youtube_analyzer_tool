@@ -4,6 +4,7 @@ Pydantic models for request/response schemas.
 from typing import List, Optional, Dict, Any, Union
 from pydantic import BaseModel, Field, HttpUrl
 from datetime import datetime
+from dataclasses import dataclass
 
 
 class AnalysisOptions(BaseModel):
@@ -40,8 +41,9 @@ class TranscriptSegment(BaseModel):
 
 class TranscriptData(BaseModel):
     """Transcript data for a language."""
-    source: str = Field(..., description="Source of transcript (auto/manual)")
+    source: str = Field(..., description="Source of transcript (auto/manual/whisper)")
     segments: List[TranscriptSegment] = Field(..., description="Transcript segments")
+    language: Optional[str] = Field(default=None, description="Detected or specified language")
 
 
 class Transcripts(BaseModel):
@@ -71,6 +73,19 @@ class MarkdownFields(BaseModel):
     summary_en: Optional[str] = Field(default=None, description="English summary in Markdown")
     transcript_es: Optional[str] = Field(default=None, description="Spanish transcript in Markdown")
     transcript_en: Optional[str] = Field(default=None, description="English transcript in Markdown")
+
+
+@dataclass
+class TranscriptChunk:
+    """A chunk of transcript with metadata."""
+    text: str
+    segments: List[TranscriptSegment]
+    start_time: float
+    end_time: float
+    token_count: int
+    char_count: int
+    chunk_index: int
+    language: str
 
 
 class ErrorInfo(BaseModel):

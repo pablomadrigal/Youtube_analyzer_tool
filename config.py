@@ -23,6 +23,11 @@ class ServiceConfig(BaseModel):
     openai_api_key: Optional[str] = Field(default=None, description="OpenAI API key")
     anthropic_api_key: Optional[str] = Field(default=None, description="Anthropic API key")
     
+    # Whisper settings
+    use_whisper_fallback: bool = Field(default=True, description="Enable Whisper fallback for transcript fetching")
+    whisper_max_audio_duration: int = Field(default=3600, description="Maximum audio duration for Whisper (seconds)")
+    whisper_chunk_duration: int = Field(default=600, description="Chunk duration for long audio files (seconds)")
+    
     # Custom model configurations
     custom_model_config: Dict[str, Any] = Field(default_factory=dict, description="Custom model configurations")
 
@@ -38,6 +43,9 @@ def load_config() -> ServiceConfig:
         max_concurrent_requests=int(os.getenv("MAX_CONCURRENT_REQUESTS", "3")),
         openai_api_key=os.getenv("OPENAI_API_KEY"),
         anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
+        use_whisper_fallback=os.getenv("USE_WHISPER_FALLBACK", "true").lower() == "true",
+        whisper_max_audio_duration=int(os.getenv("WHISPER_MAX_AUDIO_DURATION", "3600")),
+        whisper_chunk_duration=int(os.getenv("WHISPER_CHUNK_DURATION", "600")),
         custom_model_config=eval(os.getenv("CUSTOM_MODEL_CONFIG", "{}"))
     )
 

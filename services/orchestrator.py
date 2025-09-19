@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from models import (
-    VideoResult, VideoMetadata, Transcripts, Summaries, 
-    ErrorInfo
+    AnalysisOptions, VideoResult, VideoMetadata, Transcripts, Summaries, 
+    ErrorInfo, TranscriptChunk
 )
 from app_logging import log_with_context
 from services.metadata_fetcher import metadata_fetcher

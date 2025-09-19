@@ -14,6 +14,9 @@ from youtube_transcript_api._errors import (
 
 from models import TranscriptData, TranscriptSegment, Transcripts, ErrorInfo
 from app_logging import log_with_context
+from config import config
+from .audio_downloader import audio_downloader
+from .whisper_transcriber import whisper_transcriber
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +27,8 @@ class TranscriptFetcher:
     def __init__(self):
         """Initialize the transcript fetcher."""
         self.text_formatter = TextFormatter()
-        self.supported_languages = ['es', 'en']
+        self.supported_languages = ['en', 'es']
+        self.use_whisper_fallback = config.use_whisper_fallback
     
     def extract_video_id(self, url: str) -> Optional[str]:
         """Extract video ID from YouTube URL (reused from metadata fetcher)."""
@@ -89,13 +93,13 @@ class TranscriptFetcher:
             # Fetch transcripts for each language
             transcript_data = {}
             unavailable = {}
-            
+
+            # Get transcript list for the video
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+
             for lang in languages:
                 try:
                     log_with_context("info", f"Fetching {lang} transcript for video {video_id}")
-                    
-                    # Get transcript list for the video
-                    transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
                     
                     # Try to find transcript in the requested language
                     transcript = self._find_transcript(transcript_list, lang)
@@ -161,10 +165,15 @@ class TranscriptFetcher:
             
             # Check if we got any transcripts
             if not transcript_data:
-                return None, ErrorInfo(
-                    code="NO_TRANSCRIPTS",
-                    message="No transcripts available in any of the requested languages"
-                )
+                # Try Whisper fallback if enabled
+                if self.use_whisper_fallback:
+                    log_with_context("info", "No YouTube transcripts found, attempting Whisper fallback")
+                    return self._try_whisper_fallback(url, languages)
+                else:
+                    return None, ErrorInfo(
+                        code="NO_TRANSCRIPTS",
+                        message="No transcripts available in any of the requested languages"
+                    )
             
             log_with_context("info", f"Successfully fetched transcripts: {list(transcript_data.keys())}")
             return transcripts, None
@@ -177,10 +186,16 @@ class TranscriptFetcher:
             
         except Exception as e:
             log_with_context("error", f"Unexpected error fetching transcripts for {url}: {str(e)}")
-            return None, ErrorInfo(
-                code="TRANSCRIPT_ERROR",
-                message=f"Unexpected error: {str(e)}"
-            )
+            
+            # Try Whisper fallback if enabled
+            if self.use_whisper_fallback:
+                log_with_context("info", "YouTube transcript API failed, attempting Whisper fallback")
+                return self._try_whisper_fallback(url, languages)
+            else:
+                return None, ErrorInfo(
+                    code="TRANSCRIPT_ERROR",
+                    message=f"Unexpected error: {str(e)}"
+                )
     
     def _find_transcript(self, transcript_list, language: str):
         """Find transcript in the requested language, with fallback logic."""
@@ -263,6 +278,81 @@ class TranscriptFetcher:
         ]
         
         return self.text_formatter.format_transcript(segments)
+    
+    def _try_whisper_fallback(self, url: str, languages: List[str]) -> Tuple[Optional[Transcripts], Optional[ErrorInfo]]:
+        """
+        Try to get transcript using Whisper API as fallback.
+        
+        Args:
+            url: YouTube video URL
+            languages: List of language codes to try
+            
+        Returns:
+            Tuple of (transcripts, error)
+        """
+        audio_file_path = None
+        try:
+            log_with_context("info", f"Attempting Whisper fallback for URL: {url}")
+            
+            # Download audio
+            audio_file_path, error = audio_downloader.download_audio(url)
+            if error:
+                return None, error
+            
+            # Try transcription for each requested language
+            transcript_data = {}
+            unavailable = {}
+            
+            for lang in languages:
+                try:
+                    log_with_context("info", f"Transcribing with Whisper for language: {lang}")
+                    
+                    # Transcribe with Whisper
+                    whisper_transcript, error = whisper_transcriber.transcribe_audio(audio_file_path, lang)
+                    if error:
+                        log_with_context("warning", f"Whisper transcription failed for {lang}: {error.message}")
+                        unavailable[lang] = f"whisper_error: {error.code}"
+                        continue
+                    
+                    # Convert Whisper format to our format if needed
+                    transcript_data[lang] = whisper_transcript
+                    log_with_context("info", f"Successfully transcribed with Whisper for {lang}: {len(whisper_transcript.segments)} segments")
+                    
+                except Exception as e:
+                    log_with_context("error", f"Error in Whisper transcription for {lang}: {str(e)}")
+                    unavailable[lang] = f"whisper_error: {str(e)}"
+            
+            # Clean up audio file
+            if audio_file_path:
+                audio_downloader.cleanup_audio_file(audio_file_path)
+            
+            # Check if we got any transcripts
+            if not transcript_data:
+                return None, ErrorInfo(
+                    code="WHISPER_FAILED",
+                    message="Whisper transcription failed for all requested languages"
+                )
+            
+            # Create transcripts object
+            transcripts = Transcripts(
+                es=transcript_data.get('es'),
+                en=transcript_data.get('en'),
+                unavailable=unavailable
+            )
+            
+            log_with_context("info", f"Successfully used Whisper fallback: {list(transcript_data.keys())}")
+            return transcripts, None
+            
+        except Exception as e:
+            # Clean up audio file on error
+            if audio_file_path:
+                audio_downloader.cleanup_audio_file(audio_file_path)
+            
+            log_with_context("error", f"Unexpected error in Whisper fallback: {str(e)}")
+            return None, ErrorInfo(
+                code="WHISPER_ERROR",
+                message=f"Whisper fallback failed: {str(e)}"
+            )
 
 
 # Global instance
