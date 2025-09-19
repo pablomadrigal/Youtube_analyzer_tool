@@ -2,14 +2,13 @@
 Metadata fetcher using yt-dlp to extract video information.
 """
 import logging
-import re
 from typing import Optional, Dict, Any
-from urllib.parse import urlparse, parse_qs
 import yt_dlp
 from datetime import datetime
 
 from models import VideoMetadata, ErrorInfo
 from app_logging import log_with_context
+from .utils import extract_video_id
 
 logger = logging.getLogger(__name__)
 
@@ -31,34 +30,7 @@ class MetadataFetcher:
     
     def extract_video_id(self, url: str) -> Optional[str]:
         """Extract video ID from YouTube URL."""
-        try:
-            # Handle various YouTube URL formats
-            patterns = [
-                r'(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})',
-                r'youtube\.com\/watch\?.*v=([a-zA-Z0-9_-]{11})',
-            ]
-            
-            for pattern in patterns:
-                match = re.search(pattern, url)
-                if match:
-                    return match.group(1)
-            
-            # Try parsing as URL
-            parsed = urlparse(url)
-            if 'youtube.com' in parsed.netloc or 'youtu.be' in parsed.netloc:
-                if parsed.path.startswith('/watch'):
-                    query_params = parse_qs(parsed.query)
-                    if 'v' in query_params:
-                        return query_params['v'][0]
-                elif parsed.path.startswith('/') and len(parsed.path) > 1:
-                    # Handle youtu.be/VIDEO_ID format
-                    return parsed.path[1:]
-            
-            return None
-            
-        except Exception as e:
-            log_with_context("error", f"Failed to extract video ID from URL {url}: {str(e)}")
-            return None
+        return extract_video_id(url)
     
     def fetch_metadata(self, url: str) -> tuple[Optional[VideoMetadata], Optional[ErrorInfo]]:
         """

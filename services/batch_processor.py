@@ -189,52 +189,55 @@ class BatchProcessor:
         # First attempt
         response = await self.process_batch(urls, options, request_id)
         
-        # Retry failed videos
-        failed_urls = []
-        for i, result in enumerate(response.results):
-            if result.status == "error":
-                failed_urls.append((i, urls[i]))
+        # Retry failed videos if configured
+        if self.config.max_retries > 0:
+            response = await self._retry_failed_videos(response, urls, options)
         
-        if failed_urls and self.config.max_retries > 0:
-            log_with_context("info", f"Retrying {len(failed_urls)} failed videos")
+        return response
+    
+    async def _retry_failed_videos(self, response: AnalysisResponse, urls: List[str], options: AnalysisOptions) -> AnalysisResponse:
+        """Retry failed videos up to max_retries times."""
+        for retry_attempt in range(self.config.max_retries):
+            failed_indices = [
+                i for i, result in enumerate(response.results) 
+                if result.status == "error"
+            ]
             
-            for retry_attempt in range(self.config.max_retries):
-                if not failed_urls:
-                    break
-                
-                log_with_context("info", f"Retry attempt {retry_attempt + 1} for {len(failed_urls)} videos")
-                
-                # Process failed videos
-                retry_tasks = []
-                for index, url in failed_urls:
-                    task = self._process_single_video(url, options, index)
-                    retry_tasks.append((index, task))
-                
-                # Wait for retry tasks
-                retry_results = await asyncio.gather(*[task for _, task in retry_tasks], return_exceptions=True)
-                
-                # Update results
-                new_failed_urls = []
-                for i, (original_index, task_result) in enumerate(zip([idx for idx, _ in retry_tasks], retry_results)):
-                    if isinstance(task_result, Exception):
-                        log_with_context("error", f"Retry failed for video {original_index}: {str(task_result)}")
-                        new_failed_urls.append((original_index, urls[original_index]))
+            if not failed_indices:
+                break
+            
+            log_with_context("info", f"Retry attempt {retry_attempt + 1} for {len(failed_indices)} failed videos")
+            
+            # Process failed videos concurrently
+            retry_tasks = [
+                self._process_single_video(urls[i], options, i) 
+                for i in failed_indices
+            ]
+            
+            retry_results = await asyncio.gather(*retry_tasks, return_exceptions=True)
+            
+            # Update results
+            success_count = 0
+            for i, task_result in enumerate(zip(failed_indices, retry_results)):
+                index, result = task_result
+                if isinstance(result, Exception):
+                    log_with_context("error", f"Retry failed for video {index}: {str(result)}")
+                else:
+                    video_result, success = result
+                    if success:
+                        response.results[index] = video_result
+                        success_count += 1
+                        log_with_context("info", f"Retry succeeded for video {index}")
                     else:
-                        result, success = task_result
-                        if success:
-                            response.results[original_index] = result
-                            response.aggregation.succeeded += 1
-                            response.aggregation.failed -= 1
-                            log_with_context("info", f"Retry succeeded for video {original_index}")
-                        else:
-                            new_failed_urls.append((original_index, urls[original_index]))
-                            log_with_context("warning", f"Retry failed for video {original_index}: {result.error.message}")
-                
-                failed_urls = new_failed_urls
-                
-                if not failed_urls:
-                    log_with_context("info", "All videos processed successfully after retry")
-                    break
+                        log_with_context("warning", f"Retry failed for video {index}: {video_result.error.message}")
+            
+            # Update aggregation
+            response.aggregation.succeeded += success_count
+            response.aggregation.failed -= success_count
+            
+            if success_count == 0:
+                log_with_context("info", "No more videos can be retried successfully")
+                break
         
         return response
 

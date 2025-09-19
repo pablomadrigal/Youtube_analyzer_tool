@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from models import AnalysisRequest, JobStatus
 from app_logging import get_request_id, log_with_context
 from services.job_manager import job_manager
+from services.utils import validate_provider_config
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["jobs"])
@@ -25,7 +26,7 @@ async def create_async_analysis(request: AnalysisRequest):
     log_with_context("info", f"Creating async analysis job: {len(request.urls)} URLs")
     
     # Validate provider configuration
-    if not _validate_provider_config(request.options.provider):
+    if not validate_provider_config(request.options.provider):
         raise HTTPException(
             status_code=500,
             detail={
@@ -149,14 +150,3 @@ async def list_jobs():
     }
 
 
-def _validate_provider_config(provider: str) -> bool:
-    """Validate that the provider is properly configured."""
-    from config import config
-    
-    if provider.startswith("openai/"):
-        return config.openai_api_key is not None
-    elif provider.startswith("anthropic/"):
-        return config.anthropic_api_key is not None
-    else:
-        # For now, assume other providers are valid
-        return True

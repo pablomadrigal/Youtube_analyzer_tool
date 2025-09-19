@@ -18,6 +18,7 @@ from services.orchestrator import video_orchestrator
 from services.response_formatter import response_formatter
 from services.batch_processor import default_batch_processor
 from services.observability import observability_service
+from services.utils import validate_provider_config
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["analysis"])
@@ -39,7 +40,7 @@ async def analyze_videos(request: AnalysisRequest):
     start_time = time.time()
     
     # Validate provider configuration
-    if not _validate_provider_config(request.options.provider):
+    if not validate_provider_config(request.options.provider):
         raise HTTPException(
             status_code=500,
             detail={
@@ -135,12 +136,3 @@ async def analyze_videos(request: AnalysisRequest):
         )
 
 
-def _validate_provider_config(provider: str) -> bool:
-    """Validate that the provider is properly configured."""
-    if provider.startswith("openai/"):
-        return config.openai_api_key is not None
-    elif provider.startswith("anthropic/"):
-        return config.anthropic_api_key is not None
-    else:
-        # For now, assume other providers are valid
-        return True

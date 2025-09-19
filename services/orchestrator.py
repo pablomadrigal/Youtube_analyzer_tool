@@ -16,6 +16,7 @@ from services.metadata_fetcher import metadata_fetcher
 from services.transcript_fetcher import transcript_fetcher
 from services.transcript_chunker import default_chunker
 from services.summarization_service import SummarizationService, SummarizationConfig
+from services.utils import TimingContext
 
 logger = logging.getLogger(__name__)
 
@@ -109,100 +110,97 @@ class VideoOrchestrator:
     
     async def _fetch_metadata(self, url: str, video_id: str, stats: ProcessingStats) -> Tuple[Optional[VideoMetadata], Optional[ErrorInfo]]:
         """Fetch video metadata."""
-        start_time = datetime.now()
-        
-        try:
-            metadata, error = self.metadata_fetcher.fetch_metadata(url)
-            stats.metadata_fetch_time = (datetime.now() - start_time).total_seconds()
-            
-            if error:
-                log_with_context("error", f"Metadata fetch failed: {error.message}")
-                return None, error
-            
-            log_with_context("info", f"Metadata fetched: {metadata.title}")
-            return metadata, None
-            
-        except Exception as e:
-            stats.metadata_fetch_time = (datetime.now() - start_time).total_seconds()
-            log_with_context("error", f"Metadata fetch error: {str(e)}")
-            return None, ErrorInfo(code="METADATA_ERROR", message=str(e))
+        with TimingContext("metadata_fetch") as timing:
+            try:
+                metadata, error = self.metadata_fetcher.fetch_metadata(url)
+                stats.metadata_fetch_time = timing.elapsed_seconds
+                
+                if error:
+                    log_with_context("error", f"Metadata fetch failed: {error.message}")
+                    return None, error
+                
+                log_with_context("info", f"Metadata fetched: {metadata.title}")
+                return metadata, None
+                
+            except Exception as e:
+                stats.metadata_fetch_time = timing.elapsed_seconds
+                log_with_context("error", f"Metadata fetch error: {str(e)}")
+                return None, ErrorInfo(code="METADATA_ERROR", message=str(e))
     
     async def _fetch_transcripts(self, url: str, video_id: str, options: AnalysisOptions, stats: ProcessingStats) -> Tuple[Optional[Transcripts], Optional[ErrorInfo]]:
         """Fetch video transcripts."""
-        start_time = datetime.now()
-        
-        try:
-            transcripts, error = self.transcript_fetcher.fetch_transcripts(url, options.languages)
-            stats.transcript_fetch_time = (datetime.now() - start_time).total_seconds()
-            
-            if error:
-                log_with_context("warning", f"Transcript fetch failed: {error.message}")
-                return None, error
-            
-            log_with_context("info", f"Transcripts fetched: {list(transcripts.__dict__.keys())}")
-            return transcripts, None
-            
-        except Exception as e:
-            stats.transcript_fetch_time = (datetime.now() - start_time).total_seconds()
-            log_with_context("error", f"Transcript fetch error: {str(e)}")
-            return None, ErrorInfo(code="TRANSCRIPT_ERROR", message=str(e))
+        with TimingContext("transcript_fetch") as timing:
+            try:
+                transcripts, error = self.transcript_fetcher.fetch_transcripts(url, options.languages)
+                stats.transcript_fetch_time = timing.elapsed_seconds
+                
+                if error:
+                    log_with_context("warning", f"Transcript fetch failed: {error.message}")
+                    return None, error
+                
+                log_with_context("info", f"Transcripts fetched: {list(transcripts.__dict__.keys())}")
+                return transcripts, None
+                
+            except Exception as e:
+                stats.transcript_fetch_time = timing.elapsed_seconds
+                log_with_context("error", f"Transcript fetch error: {str(e)}")
+                return None, ErrorInfo(code="TRANSCRIPT_ERROR", message=str(e))
     
     async def _chunk_transcripts(self, transcripts: Optional[Transcripts], options: AnalysisOptions, stats: ProcessingStats) -> Tuple[List[TranscriptChunk], List[TranscriptChunk]]:
         """Chunk transcripts for processing."""
-        start_time = datetime.now()
-        es_chunks = []
-        en_chunks = []
-        
-        try:
-            if transcripts:
-                if transcripts.es:
-                    es_chunks = self.chunker.chunk_transcript(transcripts.es, "es")
-                    log_with_context("info", f"Created {len(es_chunks)} Spanish chunks")
+        with TimingContext("transcript_chunking") as timing:
+            es_chunks = []
+            en_chunks = []
+            
+            try:
+                if transcripts:
+                    if transcripts.es:
+                        es_chunks = self.chunker.chunk_transcript(transcripts.es, "es")
+                        log_with_context("info", f"Created {len(es_chunks)} Spanish chunks")
+                    
+                    if transcripts.en:
+                        en_chunks = self.chunker.chunk_transcript(transcripts.en, "en")
+                        log_with_context("info", f"Created {len(en_chunks)} English chunks")
                 
-                if transcripts.en:
-                    en_chunks = self.chunker.chunk_transcript(transcripts.en, "en")
-                    log_with_context("info", f"Created {len(en_chunks)} English chunks")
-            
-            stats.chunking_time = (datetime.now() - start_time).total_seconds()
-            return es_chunks, en_chunks
-            
-        except Exception as e:
-            stats.chunking_time = (datetime.now() - start_time).total_seconds()
-            log_with_context("error", f"Chunking error: {str(e)}")
-            return [], []
+                stats.chunking_time = timing.elapsed_seconds
+                return es_chunks, en_chunks
+                
+            except Exception as e:
+                stats.chunking_time = timing.elapsed_seconds
+                log_with_context("error", f"Chunking error: {str(e)}")
+                return [], []
     
     async def _generate_summaries(self, es_chunks: List[TranscriptChunk], en_chunks: List[TranscriptChunk], options: AnalysisOptions, stats: ProcessingStats) -> Optional[Summaries]:
         """Generate summaries from chunks."""
-        start_time = datetime.now()
-        
-        try:
-            if not es_chunks and not en_chunks:
-                log_with_context("info", "No chunks available for summarization")
+        with TimingContext("summarization") as timing:
+            try:
+                if not es_chunks and not en_chunks:
+                    log_with_context("info", "No chunks available for summarization")
+                    return None
+                
+                # Configure summarizer
+                summarizer_config = SummarizationConfig(
+                    provider=options.provider,
+                    temperature=options.temperature,
+                    max_tokens=options.max_tokens
+                )
+                summarizer = SummarizationService(summarizer_config)
+                
+                # Generate summaries
+                summaries, error = await summarizer.summarize_bilingual(es_chunks, en_chunks)
+                stats.summarization_time = timing.elapsed_seconds
+                
+                if error:
+                    log_with_context("warning", f"Summary generation failed: {error.message}")
+                    return None
+                
+                log_with_context("info", "Summaries generated successfully")
+                return summaries
+                
+            except Exception as e:
+                stats.summarization_time = timing.elapsed_seconds
+                log_with_context("error", f"Summary generation error: {str(e)}")
                 return None
-            
-            # Configure summarizer
-            summarizer_config = SummarizationConfig(
-                provider=options.provider,
-                temperature=options.temperature,
-                max_tokens=options.max_tokens
-            )
-            summarizer = SummarizationService(summarizer_config)
-            
-            # Generate summaries
-            summaries, error = await summarizer.summarize_bilingual(es_chunks, en_chunks)
-            stats.summarization_time = (datetime.now() - start_time).total_seconds()
-            
-            if error:
-                log_with_context("warning", f"Summary generation failed: {error.message}")
-                return None
-            
-            log_with_context("info", "Summaries generated successfully")
-            return summaries
-            
-        except Exception as e:
-            stats.summarization_time = (datetime.now() - start_time).total_seconds()
-            log_with_context("error", f"Summary generation error: {str(e)}")
-            return None
     
     def _create_error_result(self, url: str, video_id: str, error_code: str, error_message: str) -> VideoResult:
         """Create an error result."""

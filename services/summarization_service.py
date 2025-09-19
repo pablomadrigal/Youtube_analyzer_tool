@@ -12,6 +12,7 @@ from litellm import completion
 from models import SummaryData, Summaries, TranscriptChunk, ErrorInfo
 from app_logging import log_with_context
 from config import config
+from .utils import RetryManager
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,10 @@ class SummarizationService:
         """Initialize the summarization service."""
         self.config = summarization_config or SummarizationConfig()
         self.prompt_templates = PromptTemplates()
+        self.retry_manager = RetryManager(
+            max_retries=self.config.max_retries,
+            base_delay=self.config.retry_delay
+        )
     
     async def summarize_transcript(self, chunks: List[TranscriptChunk], language: str) -> Tuple[Optional[SummaryData], Optional[ErrorInfo]]:
         """
@@ -58,8 +63,10 @@ class SummarizationService:
             # Combine chunks into single text
             combined_text = self._combine_chunks(chunks)
             
-            # Generate summary using LLM
-            summary_text = await self._generate_summary(combined_text, language)
+            # Generate summary using LLM with retry logic
+            summary_text = await self.retry_manager.execute_with_retry(
+                self._make_llm_request, combined_text, language
+            )
             
             if not summary_text:
                 return None, ErrorInfo(
@@ -93,53 +100,32 @@ class SummarizationService:
         
         return "".join(combined_parts)
     
-    async def _generate_summary(self, text: str, language: str) -> Optional[str]:
-        """Generate summary using LLM provider."""
-        try:
-            # Get prompt template for the language
-            prompt = self.prompt_templates.get_summary_prompt(text, language)
-            
-            # Configure LiteLLM
-            litellm.set_verbose = False
-            
-            # Make API call with retry logic
-            for attempt in range(self.config.max_retries):
-                try:
-                    response = await asyncio.wait_for(
-                        asyncio.to_thread(
-                            completion,
-                            model=self.config.provider,
-                            messages=[
-                                {"role": "user", "content": prompt}
-                            ],
-                            temperature=self.config.temperature,
-                            max_tokens=self.config.max_tokens,
-                        ),
-                        timeout=self.config.timeout
-                    )
-                    
-                    if response and response.choices:
-                        return response.choices[0].message.content
-                    
-                except asyncio.TimeoutError:
-                    log_with_context("warning", f"LLM request timeout (attempt {attempt + 1})")
-                    if attempt < self.config.max_retries - 1:
-                        await asyncio.sleep(self.config.retry_delay * (2 ** attempt))
-                    else:
-                        raise
-                
-                except Exception as e:
-                    log_with_context("warning", f"LLM request failed (attempt {attempt + 1}): {str(e)}")
-                    if attempt < self.config.max_retries - 1:
-                        await asyncio.sleep(self.config.retry_delay * (2 ** attempt))
-                    else:
-                        raise
-            
-            return None
-            
-        except Exception as e:
-            log_with_context("error", f"LLM generation failed: {str(e)}")
-            return None
+    async def _make_llm_request(self, text: str, language: str) -> Optional[str]:
+        """Make LLM request for summary generation."""
+        # Get prompt template for the language
+        prompt = self.prompt_templates.get_summary_prompt(text, language)
+        
+        # Configure LiteLLM
+        litellm.set_verbose = False
+        
+        # Make API call
+        response = await asyncio.wait_for(
+            asyncio.to_thread(
+                completion,
+                model=self.config.provider,
+                messages=[
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=self.config.temperature,
+                max_tokens=self.config.max_tokens,
+            ),
+            timeout=self.config.timeout
+        )
+        
+        if response and response.choices:
+            return response.choices[0].message.content
+        
+        return None
     
     def _parse_summary(self, summary_text: str, language: str) -> SummaryData:
         """Parse LLM response into structured summary data."""

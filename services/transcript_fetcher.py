@@ -18,6 +18,7 @@ from config import config
 from .audio_downloader import audio_downloader
 from .whisper_transcriber import whisper_transcriber
 from .cache import cache
+from .utils import extract_video_id
 from rich.console import Console
 
 console = Console()
@@ -35,38 +36,8 @@ class TranscriptFetcher:
         self.use_whisper_fallback = config.use_whisper_fallback
     
     def extract_video_id(self, url: str) -> Optional[str]:
-        """Extract video ID from YouTube URL (reused from metadata fetcher)."""
-        import re
-        from urllib.parse import urlparse, parse_qs
-        
-        try:
-            # Handle various YouTube URL formats
-            patterns = [
-                r'(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})',
-                r'youtube\.com\/watch\?.*v=([a-zA-Z0-9_-]{11})',
-            ]
-            
-            for pattern in patterns:
-                match = re.search(pattern, url)
-                if match:
-                    return match.group(1)
-            
-            # Try parsing as URL
-            parsed = urlparse(url)
-            if 'youtube.com' in parsed.netloc or 'youtu.be' in parsed.netloc:
-                if parsed.path.startswith('/watch'):
-                    query_params = parse_qs(parsed.query)
-                    if 'v' in query_params:
-                        return query_params['v'][0]
-                elif parsed.path.startswith('/') and len(parsed.path) > 1:
-                    # Handle youtu.be/VIDEO_ID format
-                    return parsed.path[1:]
-            
-            return None
-            
-        except Exception as e:
-            log_with_context("error", f"Failed to extract video ID from URL {url}: {str(e)}")
-            return None
+        """Extract video ID from YouTube URL."""
+        return extract_video_id(url)
     
     def fetch_transcripts(self, url: str, languages: List[str] = None) -> Tuple[Optional[Transcripts], Optional[ErrorInfo]]:
         """
@@ -231,58 +202,11 @@ class TranscriptFetcher:
             console.print("[dim]Using cached transcript[/dim]")
             return cached_transcript
         
-        # Try YouTube's official transcript API first
-        try:
-            api = YouTubeTranscriptApi()
-            
-            # Try to fetch transcript in preferred languages
-            for lang_code in lang_priority:
-                try:
-                    console.print(f"[dim]Trying language: {lang_code}[/dim]")
-                    transcript_data = api.get_transcript(video_id, languages=[lang_code])
-                    
-                    transcript_lines = [
-                        TranscriptLine(
-                            start=segment.start,
-                            duration=segment.duration,
-                            text=segment.text
-                        )
-                        for segment in transcript_data
-                    ]
-                    
-                    console.print(f"[green]✅ Found transcript in {lang_code} with {len(transcript_lines)} segments[/green]")
-                    # Cache the transcript
-                    cache.set_transcript(video_id, transcript_lines)
-                    return transcript_lines
-                    
-                except Exception as e:
-                    console.print(f"[dim]Failed for {lang_code}: {e}[/dim]")
-                    continue
-            
-            # Try with default language (auto-detect)
-            try:
-                console.print("[dim]Trying with auto-detected language[/dim]")
-                transcript_data = api.get_transcript(video_id)
-                
-                transcript_lines = [
-                    TranscriptLine(
-                        start=segment.start,
-                        duration=segment.duration,
-                        text=segment.text
-                    )
-                    for segment in transcript_data
-                ]
-                
-                console.print(f"[green]✅ Found transcript with auto-detection: {len(transcript_lines)} segments[/green]")
-                # Cache the transcript
-                cache.set_transcript(video_id, transcript_lines)
-                return transcript_lines
-                
-            except Exception as e:
-                console.print(f"[yellow]Auto-detection also failed: {e}[/yellow]")
-                
-        except Exception as e:
-            console.print(f"[yellow]YouTube transcript API failed: {e}[/yellow]")
+        # Try YouTube API first
+        transcript_lines = self._try_youtube_api(video_id, lang_priority)
+        if transcript_lines:
+            cache.set_transcript(video_id, transcript_lines)
+            return transcript_lines
         
         # Try Whisper fallback
         try:
@@ -290,7 +214,6 @@ class TranscriptFetcher:
                 f"https://www.youtube.com/watch?v={video_id}",
                 lang_priority
             )
-            # Cache the transcript
             cache.set_transcript(video_id, transcript_lines)
             return transcript_lines
         except Exception as e:
@@ -298,6 +221,52 @@ class TranscriptFetcher:
                 f"No transcript available via YouTube API, and Whisper fallback failed: {e}. "
                 "Set OPENAI_API_KEY environment variable to enable transcription."
             )
+    
+    def _try_youtube_api(self, video_id: str, lang_priority: List[str]) -> Optional[List[TranscriptLine]]:
+        """Try to fetch transcript using YouTube API."""
+        try:
+            api = YouTubeTranscriptApi()
+            
+            # Try preferred languages
+            for lang_code in lang_priority:
+                transcript_lines = self._fetch_for_language(api, video_id, lang_code)
+                if transcript_lines:
+                    return transcript_lines
+            
+            # Try auto-detect
+            return self._fetch_for_language(api, video_id, None)
+            
+        except Exception as e:
+            console.print(f"[yellow]YouTube transcript API failed: {e}[/yellow]")
+            return None
+    
+    def _fetch_for_language(self, api: YouTubeTranscriptApi, video_id: str, lang_code: Optional[str]) -> Optional[List[TranscriptLine]]:
+        """Fetch transcript for a specific language."""
+        try:
+            if lang_code:
+                console.print(f"[dim]Trying language: {lang_code}[/dim]")
+                transcript_data = api.get_transcript(video_id, languages=[lang_code])
+            else:
+                console.print("[dim]Trying with auto-detected language[/dim]")
+                transcript_data = api.get_transcript(video_id)
+            
+            transcript_lines = [
+                TranscriptLine(
+                    start=segment.start,
+                    duration=segment.duration,
+                    text=segment.text
+                )
+                for segment in transcript_data
+            ]
+            
+            lang_display = lang_code or "auto-detected"
+            console.print(f"[green]✅ Found transcript in {lang_display} with {len(transcript_lines)} segments[/green]")
+            return transcript_lines
+            
+        except Exception as e:
+            lang_display = lang_code or "auto-detected"
+            console.print(f"[dim]Failed for {lang_display}: {e}[/dim]")
+            return None
     
     def _whisper_fallback_transcribe(
         self, 
