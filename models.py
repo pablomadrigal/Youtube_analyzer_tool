@@ -65,18 +65,44 @@ class Transcripts(BaseModel):
     unavailable: Dict[str, str] = Field(default_factory=dict, description="Unavailable transcripts with reasons")
 
 
+class FrameworkData(BaseModel):
+    """Framework or method with step-by-step breakdown."""
+    name: str = Field(..., description="Name of the framework or method")
+    description: str = Field(..., description="Description of what the framework does")
+    steps: List[str] = Field(..., description="Step-by-step breakdown of the framework")
+
+
 class SummaryData(BaseModel):
-    """Structured summary data."""
-    topics: List[str] = Field(..., description="Key topics")
-    bullets: List[str] = Field(..., description="Key bullet points")
-    quotes: List[str] = Field(..., description="Notable quotes")
-    actions: List[str] = Field(..., description="Action items")
+    """Enhanced structured summary data with comprehensive insights."""
+    summary: str = Field(..., description="2-3 paragraph executive summary of the core message and value")
+    key_insights: List[str] = Field(..., description="8-12 most important insights as detailed paragraphs")
+    frameworks: List[FrameworkData] = Field(default_factory=list, description="Actionable frameworks/methods with step-by-step breakdowns")
+    key_moments: List[str] = Field(..., description="Chronological sequence of important events/topics discussed")
+    
+    # Legacy fields for backward compatibility
+    topics: List[str] = Field(default_factory=list, description="Key topics (legacy)")
+    bullets: List[str] = Field(default_factory=list, description="Key bullet points (legacy)")
+    quotes: List[str] = Field(default_factory=list, description="Notable quotes (legacy)")
+    actions: List[str] = Field(default_factory=list, description="Action items (legacy)")
+
+
+class ChunkSummaryData(BaseModel):
+    """Summary data for a single chunk with context information."""
+    chunk_index: int = Field(..., description="Index of this chunk")
+    start_time: float = Field(..., description="Start time of this chunk in seconds")
+    end_time: float = Field(..., description="End time of this chunk in seconds")
+    summary: str = Field(..., description="2-3 paragraph summary for this chunk")
+    key_insights: List[str] = Field(..., description="Key insights from this chunk")
+    frameworks: List[FrameworkData] = Field(default_factory=list, description="Frameworks mentioned in this chunk")
+    key_moments: List[str] = Field(..., description="Important moments in this chunk")
+    is_final_chunk: bool = Field(default=False, description="Whether this is the final chunk")
 
 
 class Summaries(BaseModel):
     """Summaries in multiple languages."""
     es: Optional[SummaryData] = Field(default=None, description="Spanish summary")
     en: Optional[SummaryData] = Field(default=None, description="English summary")
+    chunk_summaries: Optional[List[ChunkSummaryData]] = Field(default=None, description="Individual chunk summaries for markdown generation")
 
 
 class MarkdownFields(BaseModel):
