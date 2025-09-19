@@ -2,6 +2,7 @@
 Analysis API endpoints.
 """
 import logging
+import time
 from typing import List
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
@@ -13,6 +14,10 @@ from app.services.metadata_fetcher import metadata_fetcher
 from app.services.transcript_fetcher import transcript_fetcher
 from app.services.transcript_chunker import default_chunker
 from app.services.summarization_service import default_summarizer, SummarizationService, SummarizationConfig
+from app.services.orchestrator import video_orchestrator
+from app.services.response_formatter import response_formatter
+from app.services.batch_processor import default_batch_processor
+from app.services.observability import observability_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["analysis"])
@@ -30,6 +35,9 @@ async def analyze_videos(request: AnalysisRequest):
     
     log_with_context("info", f"Analysis request received: {len(request.urls)} URLs")
     
+    # Record request start
+    start_time = time.time()
+    
     # Validate provider configuration
     if not _validate_provider_config(request.options.provider):
         raise HTTPException(
@@ -42,149 +50,80 @@ async def analyze_videos(request: AnalysisRequest):
             }
         )
     
-    try:
-        results = []
-        succeeded = 0
-        failed = 0
+    # Check if async processing is requested
+    if request.options.async_processing:
+        from app.services.job_manager import job_manager
         
-        for url in request.urls:
-            try:
-                log_with_context("info", f"Processing URL: {url}")
-                
-                # Extract video ID
-                video_id = metadata_fetcher.extract_video_id(str(url))
-                if not video_id:
-                    results.append(VideoResult(
-                        url=str(url),
-                        video_id="unknown",
-                        status="error",
-                        error={
-                            "code": "INVALID_URL",
-                            "message": "Could not extract video ID from URL"
-                        }
-                    ))
-                    failed += 1
-                    continue
-                
-                # Fetch metadata
-                metadata, error = metadata_fetcher.fetch_metadata(str(url))
-                if error:
-                    results.append(VideoResult(
-                        url=str(url),
-                        video_id=video_id,
-                        status="error",
-                        error={
-                            "code": error.code,
-                            "message": error.message
-                        }
-                    ))
-                    failed += 1
-                    continue
-                
-                # Fetch transcripts
-                transcripts, transcript_error = transcript_fetcher.fetch_transcripts(
-                    str(url), 
-                    request.options.languages
-                )
-                
-                # If transcript fetching fails, we still continue with metadata only
-                if transcript_error:
-                    log_with_context("warning", f"Transcript fetch failed for {url}: {transcript_error.message}")
-                    transcripts = None
-                else:
-                    # Chunk transcripts for processing
-                    es_chunks = []
-                    en_chunks = []
-                    
-                    if transcripts:
-                        log_with_context("info", f"Chunking transcripts for {url}")
-                        
-                        # Chunk Spanish transcript if available
-                        if transcripts.es:
-                            es_chunks = default_chunker.chunk_transcript(transcripts.es, "es")
-                            log_with_context("info", f"Created {len(es_chunks)} Spanish chunks")
-                        
-                        # Chunk English transcript if available
-                        if transcripts.en:
-                            en_chunks = default_chunker.chunk_transcript(transcripts.en, "en")
-                            log_with_context("info", f"Created {len(en_chunks)} English chunks")
-                        
-                        # Generate summaries if chunks are available
-                        summaries = None
-                        if es_chunks or en_chunks:
-                            log_with_context("info", f"Generating summaries for {url}")
-                            
-                            # Configure summarizer with request options
-                            summarizer_config = SummarizationConfig(
-                                provider=request.options.provider,
-                                temperature=request.options.temperature,
-                                max_tokens=request.options.max_tokens
-                            )
-                            summarizer = SummarizationService(summarizer_config)
-                            
-                            # Generate bilingual summaries
-                            summaries, summary_error = await summarizer.summarize_bilingual(es_chunks, en_chunks)
-                            
-                            if summary_error:
-                                log_with_context("warning", f"Summary generation failed for {url}: {summary_error.message}")
-                                summaries = None
-                            else:
-                                log_with_context("info", f"Successfully generated summaries for {url}")
-                    else:
-                        summaries = None
-                
-                # Create successful result with metadata, transcripts, and summaries
-                result = VideoResult(
-                    url=str(url),
-                    video_id=video_id,
-                    status="ok",
-                    metadata=metadata,
-                    transcripts=transcripts,
-                    summaries=summaries,
-                    markdown=None if not request.options.include_markdown else {
-                        "summary_es": None,
-                        "summary_en": None,
-                        "transcript_es": None,
-                        "transcript_en": None
-                    }
-                )
-                
-                results.append(result)
-                succeeded += 1
-                log_with_context("info", f"Successfully processed: {url}")
-                
-            except Exception as e:
-                log_with_context("error", f"Error processing {url}: {str(e)}")
-                results.append(VideoResult(
-                    url=str(url),
-                    video_id="unknown",
-                    status="error",
-                    error={
-                        "code": "PROCESSING_ERROR",
-                        "message": str(e)
-                    }
-                ))
-                failed += 1
-        
-        response = AnalysisResponse(
-            request_id=request_id,
-            results=results,
-            aggregation=AggregationInfo(
-                total=len(request.urls),
-                succeeded=succeeded,
-                failed=failed
-            ),
-            config=ConfigInfo(
-                provider=request.options.provider,
-                temperature=request.options.temperature,
-                max_tokens=request.options.max_tokens
+        try:
+            # Create async job
+            job_id = await job_manager.create_job(request)
+            
+            log_with_context("info", f"Created async job {job_id}")
+            
+            return JSONResponse(
+                status_code=202,
+                content={
+                    "job_id": job_id,
+                    "status": "pending",
+                    "message": "Analysis job created successfully",
+                    "request_id": request_id
+                }
             )
+            
+        except Exception as e:
+            log_with_context("error", f"Failed to create async job: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": "Job creation failed",
+                    "message": str(e),
+                    "request_id": request_id
+                }
+            )
+    
+    try:
+        # Use batch processor for efficient processing
+        response = await default_batch_processor.process_batch(
+            [str(url) for url in request.urls],
+            request.options,
+            request_id
         )
         
-        log_with_context("info", f"Analysis completed: {succeeded} succeeded, {failed} failed")
+        # Format results with optional Markdown
+        if request.options.include_markdown:
+            formatted_results = []
+            for result in response.results:
+                formatted_result = response_formatter.format_video_result(result, True)
+                formatted_results.append(formatted_result)
+            response.results = formatted_results
+        
+        # Record metrics
+        processing_time = time.time() - start_time
+        success = response.aggregation.failed == 0
+        observability_service.record_request(
+            request_type="analysis",
+            success=success,
+            processing_time=processing_time,
+            error_code=None if success else "BATCH_FAILURE",
+            provider=request.options.provider,
+            languages=request.options.languages
+        )
+        
+        log_with_context("info", f"Analysis completed: {response.aggregation.succeeded} succeeded, {response.aggregation.failed} failed")
         return response
         
     except Exception as e:
+        # Record error metrics
+        processing_time = time.time() - start_time
+        observability_service.record_request(
+            request_type="analysis",
+            success=False,
+            processing_time=processing_time,
+            error_code="ANALYSIS_ERROR",
+            provider=request.options.provider,
+            languages=request.options.languages
+        )
+        
         log_with_context("error", f"Analysis failed: {str(e)}")
         raise HTTPException(
             status_code=500,
