@@ -19,13 +19,14 @@ from services.response_formatter import response_formatter
 from services.batch_processor import default_batch_processor
 from services.observability import observability_service
 from services.utils import validate_provider_config
+from .security import require_auth
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["analysis"])
 
 
 @router.post("/analyze", response_model=AnalysisResponse)
-async def analyze_videos(request: AnalysisRequest):
+async def analyze_videos(request: AnalysisRequest, current_user: dict = require_auth()):
     """
     Analyze one or more YouTube videos.
     

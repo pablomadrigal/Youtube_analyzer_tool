@@ -19,6 +19,9 @@ class ServiceConfig(BaseModel):
     request_timeout: int = Field(default=300, description="Request timeout in seconds")
     max_concurrent_requests: int = Field(default=3, description="Max concurrent requests")
     
+    # Security configuration
+    api_token: Optional[str] = Field(default=None, description="Static API token for authentication")
+    
     # Provider API keys
     openai_api_key: Optional[str] = Field(default=None, description="OpenAI API key")
     anthropic_api_key: Optional[str] = Field(default=None, description="Anthropic API key")
@@ -44,6 +47,7 @@ def load_config() -> ServiceConfig:
         default_max_tokens=int(os.getenv("DEFAULT_MAX_TOKENS", "1200")),
         request_timeout=int(os.getenv("REQUEST_TIMEOUT", "300")),
         max_concurrent_requests=int(os.getenv("MAX_CONCURRENT_REQUESTS", "3")),
+        api_token=os.getenv("API_TOKEN"),
         openai_api_key=os.getenv("OPENAI_API_KEY"),
         anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
         use_whisper_fallback=os.getenv("USE_WHISPER_FALLBACK", "true").lower() == "true",

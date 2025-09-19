@@ -42,10 +42,16 @@ pip install -r requirements.txt
 4. Set up environment variables:
 ```bash
 cp env.example .env
-# Edit .env with your API keys
+# Edit .env with your API keys and security token
 ```
 
-5. Run the service:
+5. Generate a secure API token:
+```bash
+python generate_token.py
+# Add the generated token to your .env file as API_TOKEN=
+```
+
+6. Run the service:
 ```bash
 python main.py
 ```
@@ -80,13 +86,18 @@ Once running, visit:
 - Swagger UI: `http://localhost:8001/docs`
 - ReDoc: `http://localhost:8001/redoc`
 
-## API Usage
+## Security
 
-### Analyze Videos
+The API uses static token authentication for the `/api/analyze` endpoint. All requests to this endpoint must include a valid API token in the Authorization header.
+
+### Authentication
+
+Include your API token in the Authorization header using the Bearer scheme:
 
 ```bash
 curl -X POST "http://localhost:8001/api/analyze" \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_TOKEN" \
   -d '{
     "urls": ["https://www.youtube.com/watch?v=VIDEO_ID"],
     "options": {
@@ -98,6 +109,26 @@ curl -X POST "http://localhost:8001/api/analyze" \
     }
   }'
 ```
+
+### Token Generation
+
+Generate a secure API token using the provided utility:
+
+```bash
+python generate_token.py
+```
+
+This will output a cryptographically secure token that you can add to your `.env` file:
+
+```
+API_TOKEN=your_generated_token_here
+```
+
+**Note**: If no `API_TOKEN` is configured in your environment, authentication will be disabled (for development purposes only).
+
+## API Usage
+
+### Analyze Videos
 
 ### Health Check
 

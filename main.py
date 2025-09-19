@@ -78,15 +78,57 @@ async def health_check():
 
 @app.get("/")
 async def root():
-    """Root endpoint."""
+    """Root endpoint with service information and documentation."""
     return {
         "message": "YouTube Analyzer Service",
         "version": "1.0.0",
+        "description": "Service to analyze YouTube videos and generate bilingual summaries",
+        "authentication": {
+            "required": bool(config.api_token),
+            "method": "Bearer Token" if config.api_token else "None (development mode)",
+            "header": "Authorization: Bearer <token>" if config.api_token else None
+        },
         "endpoints": {
-            "analyze": "/api/analyze",
-            "health": "/health",
-            "docs": "/docs"
-        }
+            "analyze": {
+                "path": "/api/analyze",
+                "method": "POST",
+                "description": "Analyze YouTube videos and generate summaries",
+                "authentication": "Required" if config.api_token else "None",
+                "documentation": "/docs#/analysis/analyze_videos_api_analyze_post"
+            },
+            "health": {
+                "path": "/health",
+                "method": "GET",
+                "description": "Health check endpoint",
+                "authentication": "None"
+            },
+            "docs": {
+                "path": "/docs",
+                "method": "GET",
+                "description": "Interactive API documentation (Swagger UI)",
+                "authentication": "None"
+            },
+            "redoc": {
+                "path": "/redoc",
+                "method": "GET",
+                "description": "Alternative API documentation (ReDoc)",
+                "authentication": "None"
+            }
+        },
+        "features": [
+            "Video metadata extraction",
+            "Bilingual transcript processing",
+            "AI-powered summarization",
+            "Whisper fallback for audio transcription",
+            "Batch processing support",
+            "Markdown output support"
+        ],
+        "supported_providers": [
+            "openai/gpt-4o-mini",
+            "openai/gpt-4o",
+            "anthropic/claude-3-5-sonnet",
+            "anthropic/claude-3-haiku"
+        ]
     }
 
 
