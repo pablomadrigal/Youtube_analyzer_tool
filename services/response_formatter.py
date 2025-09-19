@@ -67,11 +67,13 @@ class ResponseFormatter:
                     markdown_fields.summary_en = self._format_summary_markdown(result.summaries.en, "en")
             
             # Generate transcript Markdown
-            if result.transcripts:
-                if result.transcripts.es:
-                    markdown_fields.transcript_es = self._format_transcript_markdown(result.transcripts.es, "es")
-                if result.transcripts.en:
-                    markdown_fields.transcript_en = self._format_transcript_markdown(result.transcripts.en, "en")
+            if result.transcripts and result.transcripts.transcript:
+                # Create a single transcript markdown with language information
+                markdown_fields.transcript_es = self._format_transcript_markdown(
+                    result.transcripts.transcript, 
+                    result.transcripts.language or "unknown"
+                )
+                markdown_fields.transcript_en = markdown_fields.transcript_es  # Same content, different field name for compatibility
             
             return markdown_fields
             
@@ -131,8 +133,25 @@ class ResponseFormatter:
         if not transcript_data or not transcript_data.segments:
             return ""
         
-        lang_header = "Transcripción" if language == "es" else "Transcript"
-        source_note = " (Generada automáticamente)" if transcript_data.source == "auto" else " (Manual)"
+        # Use the detected language from the transcript data if available
+        detected_language = getattr(transcript_data, 'language', language)
+        
+        # Import language names mapping
+        from models import LANGUAGE_NAMES
+        
+        if detected_language:
+            language_name = LANGUAGE_NAMES.get(detected_language, detected_language.upper())
+            lang_header = f"Transcripción ({language_name})"
+        else:
+            lang_header = "Transcripción"
+        
+        source_note = ""
+        if transcript_data.source == "auto":
+            source_note = " (Generada automáticamente)"
+        elif transcript_data.source == "manual":
+            source_note = " (Manual)"
+        elif transcript_data.source == "whisper":
+            source_note = " (Transcrita por Whisper AI)"
         
         markdown_parts = [f"# {lang_header}{source_note}"]
         markdown_parts.append("")

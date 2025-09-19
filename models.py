@@ -7,6 +7,48 @@ from datetime import datetime
 from dataclasses import dataclass
 
 
+# Language mapping for human-readable names
+LANGUAGE_NAMES = {
+    'en': 'English',
+    'es': 'Español',
+    'fr': 'Français',
+    'de': 'Deutsch',
+    'it': 'Italiano',
+    'pt': 'Português',
+    'ru': 'Русский',
+    'zh': '中文',
+    'ja': '日本語',
+    'ko': '한국어',
+    'ar': 'العربية',
+    'hi': 'हिन्दी',
+    'th': 'ไทย',
+    'vi': 'Tiếng Việt',
+    'tr': 'Türkçe',
+    'pl': 'Polski',
+    'nl': 'Nederlands',
+    'sv': 'Svenska',
+    'da': 'Dansk',
+    'no': 'Norsk',
+    'fi': 'Suomi',
+    'cs': 'Čeština',
+    'hu': 'Magyar',
+    'ro': 'Română',
+    'bg': 'Български',
+    'hr': 'Hrvatski',
+    'sk': 'Slovenčina',
+    'sl': 'Slovenščina',
+    'et': 'Eesti',
+    'lv': 'Latviešu',
+    'lt': 'Lietuvių',
+    'mt': 'Malti',
+    'cy': 'Cymraeg',
+    'ga': 'Gaeilge',
+    'eu': 'Euskera',
+    'ca': 'Català',
+    'gl': 'Galego'
+}
+
+
 class TranscriptLine(BaseModel):
     """Individual transcript line with timing information."""
     start: float = Field(..., description="Start time in seconds")
@@ -59,10 +101,12 @@ class TranscriptData(BaseModel):
 
 
 class Transcripts(BaseModel):
-    """Transcripts in multiple languages."""
-    es: Optional[TranscriptData] = Field(default=None, description="Spanish transcript")
-    en: Optional[TranscriptData] = Field(default=None, description="English transcript")
-    unavailable: Dict[str, str] = Field(default_factory=dict, description="Unavailable transcripts with reasons")
+    """Transcript in the original language of the video."""
+    transcript: Optional[TranscriptData] = Field(default=None, description="Video transcript in original language")
+    language: Optional[str] = Field(default=None, description="Language code of the transcript (e.g., 'en', 'es', 'fr')")
+    language_name: Optional[str] = Field(default=None, description="Human-readable language name (e.g., 'English', 'Español')")
+    available_languages: List[str] = Field(default_factory=list, description="List of all available transcript languages for this video")
+    unavailable_reason: Optional[str] = Field(default=None, description="Reason if transcript is unavailable")
 
 
 class FrameworkData(BaseModel):

@@ -153,14 +153,17 @@ class VideoOrchestrator:
             en_chunks = []
             
             try:
-                if transcripts:
-                    if transcripts.es:
-                        es_chunks = self.chunker.chunk_transcript(transcripts.es, "es")
-                        log_with_context("info", f"Created {len(es_chunks)} Spanish chunks")
+                if transcripts and transcripts.transcript:
+                    # Use the single transcript with its detected language
+                    language = transcripts.language or 'unknown'
+                    chunks = self.chunker.chunk_transcript(transcripts.transcript, language)
                     
-                    if transcripts.en:
-                        en_chunks = self.chunker.chunk_transcript(transcripts.en, "en")
-                        log_with_context("info", f"Created {len(en_chunks)} English chunks")
+                    # For backward compatibility, populate both es_chunks and en_chunks with the same content
+                    # The actual language is determined by the transcript's language field
+                    es_chunks = chunks
+                    en_chunks = chunks
+                    
+                    log_with_context("info", f"Created {len(chunks)} chunks for language {language}")
                 
                 stats.chunking_time = timing.elapsed_seconds
                 return es_chunks, en_chunks
