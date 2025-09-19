@@ -12,6 +12,7 @@ from app.config import config
 from app.services.metadata_fetcher import metadata_fetcher
 from app.services.transcript_fetcher import transcript_fetcher
 from app.services.transcript_chunker import default_chunker
+from app.services.summarization_service import default_summarizer, SummarizationService, SummarizationConfig
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["analysis"])
@@ -92,6 +93,9 @@ async def analyze_videos(request: AnalysisRequest):
                     transcripts = None
                 else:
                     # Chunk transcripts for processing
+                    es_chunks = []
+                    en_chunks = []
+                    
                     if transcripts:
                         log_with_context("info", f"Chunking transcripts for {url}")
                         
@@ -104,15 +108,39 @@ async def analyze_videos(request: AnalysisRequest):
                         if transcripts.en:
                             en_chunks = default_chunker.chunk_transcript(transcripts.en, "en")
                             log_with_context("info", f"Created {len(en_chunks)} English chunks")
+                        
+                        # Generate summaries if chunks are available
+                        summaries = None
+                        if es_chunks or en_chunks:
+                            log_with_context("info", f"Generating summaries for {url}")
+                            
+                            # Configure summarizer with request options
+                            summarizer_config = SummarizationConfig(
+                                provider=request.options.provider,
+                                temperature=request.options.temperature,
+                                max_tokens=request.options.max_tokens
+                            )
+                            summarizer = SummarizationService(summarizer_config)
+                            
+                            # Generate bilingual summaries
+                            summaries, summary_error = await summarizer.summarize_bilingual(es_chunks, en_chunks)
+                            
+                            if summary_error:
+                                log_with_context("warning", f"Summary generation failed for {url}: {summary_error.message}")
+                                summaries = None
+                            else:
+                                log_with_context("info", f"Successfully generated summaries for {url}")
+                    else:
+                        summaries = None
                 
-                # Create successful result with metadata and transcripts
+                # Create successful result with metadata, transcripts, and summaries
                 result = VideoResult(
                     url=str(url),
                     video_id=video_id,
                     status="ok",
                     metadata=metadata,
                     transcripts=transcripts,
-                    summaries=None,    # TODO: Implement in next task
+                    summaries=summaries,
                     markdown=None if not request.options.include_markdown else {
                         "summary_es": None,
                         "summary_en": None,
