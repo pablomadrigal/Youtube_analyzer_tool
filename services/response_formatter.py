@@ -66,14 +66,25 @@ class ResponseFormatter:
                 if result.summaries.en:
                     markdown_fields.summary_en = self._format_summary_markdown(result.summaries.en, "en")
             
-            # Generate transcript Markdown
-            if result.transcripts and result.transcripts.transcript:
-                # Create a single transcript markdown with language information
-                markdown_fields.transcript_es = self._format_transcript_markdown(
-                    result.transcripts.transcript, 
-                    result.transcripts.language or "unknown"
-                )
-                markdown_fields.transcript_en = markdown_fields.transcript_es  # Same content, different field name for compatibility
+            # Generate transcript Markdown for multiple languages
+            if result.transcripts:
+                # Original language transcript
+                if result.transcripts.original:
+                    original_language = result.transcripts.language or "unknown"
+                    markdown_fields.transcript_es = self._format_transcript_markdown(
+                        result.transcripts.original, 
+                        original_language
+                    )
+                
+                # English transcript if available
+                if result.transcripts.english:
+                    markdown_fields.transcript_en = self._format_transcript_markdown(
+                        result.transcripts.english, 
+                        "en"
+                    )
+                elif result.transcripts.original:
+                    # If no English transcript, use original for both fields
+                    markdown_fields.transcript_en = markdown_fields.transcript_es
             
             return markdown_fields
             

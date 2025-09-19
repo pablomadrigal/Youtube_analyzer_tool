@@ -41,14 +41,14 @@ class TranscriptFetcher:
     
     def fetch_transcripts(self, url: str, languages: List[str] = None) -> Tuple[Optional[Transcripts], Optional[ErrorInfo]]:
         """
-        Fetch the original language transcript for a video.
+        Fetch transcripts in multiple languages for a video.
         
         Args:
             url: YouTube video URL
             languages: List of language codes to prefer (default: ['es', 'en'])
             
         Returns:
-            Tuple of (transcripts, error). If successful, transcripts contains the original language transcript.
+            Tuple of (transcripts, error). If successful, transcripts contains both original and English transcripts.
             If failed, transcripts is None and error contains error information.
         """
         if languages is None:
@@ -76,8 +76,13 @@ class TranscriptFetcher:
                     message="No transcripts available for this video"
                 )
             
-            # Find the best transcript (prefer manual over auto-generated, then prefer requested languages)
+            # Find the best original language transcript
             best_transcript = self._select_best_transcript(transcript_list, languages)
+            
+            # Try to find English transcript if available
+            english_transcript = None
+            if 'en' in [t.language_code for t in transcript_list]:
+                english_transcript = self._select_best_transcript(transcript_list, ['en'])
             
             # If no YouTube transcript is available, try Whisper fallback
             if not best_transcript:
@@ -102,7 +107,9 @@ class TranscriptFetcher:
                             
                             # Create the new streamlined transcripts structure
                             transcripts = Transcripts(
-                                transcript=transcript_data,
+                                original=transcript_data,
+                                english=None,  # Whisper doesn't provide English translation
+                                transcript=transcript_data,  # Legacy field
                                 language=transcript_data.language,
                                 language_name=LANGUAGE_NAMES.get(transcript_data.language, transcript_data.language.upper()),
                                 available_languages=[transcript_data.language],  # Whisper detected language
@@ -118,47 +125,73 @@ class TranscriptFetcher:
                         log_with_context("error", f"Whisper fallback failed: {str(e)}")
                 
                 return Transcripts(
-                    transcript=None,
+                    original=None,
+                    english=None,
+                    transcript=None,  # Legacy field
                     language=None,
                     language_name=None,
                     available_languages=[],
                     unavailable_reason="No transcripts available and Whisper fallback is disabled or failed"
                 ), None
             
-            # Fetch the transcript content
-            transcript_content = self._fetch_transcript_content(best_transcript, video_id)
-            if not transcript_content:
+            # Fetch the original transcript content
+            original_content = self._fetch_transcript_content(best_transcript, video_id)
+            if not original_content:
                 return Transcripts(
-                    transcript=None,
+                    original=None,
+                    english=None,
+                    transcript=None,  # Legacy field
                     language=None,
                     language_name=None,
                     available_languages=[t.language_code for t in transcript_list] if transcript_list else [],
                     unavailable_reason="Failed to fetch transcript content"
                 ), None
             
-            # Convert to segments
-            segments = [
+            # Convert original transcript to segments
+            original_segments = [
                 TranscriptSegment(
                     text=line.text,
                     start=line.start,
                     duration=line.duration
                 )
-                for line in transcript_content
+                for line in original_content
             ]
             
-            # Create transcript data with the detected language
+            # Create original transcript data
             detected_language = best_transcript.language_code
-            transcript_data = TranscriptData(
+            original_transcript_data = TranscriptData(
                 source=best_transcript.is_generated and "auto" or "manual",
-                segments=segments,
+                segments=original_segments,
                 language=detected_language
             )
             
-            log_with_context("info", f"Successfully fetched transcript in {detected_language}: {len(segments)} segments")
+            # Fetch English transcript if available
+            english_transcript_data = None
+            if english_transcript and english_transcript != best_transcript:
+                english_content = self._fetch_transcript_content(english_transcript, video_id)
+                if english_content:
+                    english_segments = [
+                        TranscriptSegment(
+                            text=line.text,
+                            start=line.start,
+                            duration=line.duration
+                        )
+                        for line in english_content
+                    ]
+                    english_transcript_data = TranscriptData(
+                        source=english_transcript.is_generated and "auto" or "manual",
+                        segments=english_segments,
+                        language="en"
+                    )
+                    log_with_context("info", f"Successfully fetched English transcript: {len(english_segments)} segments")
+            
+            log_with_context("info", f"Successfully fetched original transcript in {detected_language}: {len(original_segments)} segments")
             
             # Create the new streamlined transcripts structure
             transcripts = Transcripts(
-                transcript=transcript_data,
+                original=original_transcript_data,
+                english=english_transcript_data,
+                transcript=original_transcript_data,  # Legacy field
                 language=detected_language,
                 language_name=LANGUAGE_NAMES.get(detected_language, detected_language.upper()),
                 available_languages=[t.language_code for t in transcript_list] if transcript_list else [detected_language],

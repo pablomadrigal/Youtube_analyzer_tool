@@ -101,12 +101,16 @@ class TranscriptData(BaseModel):
 
 
 class Transcripts(BaseModel):
-    """Transcript in the original language of the video."""
-    transcript: Optional[TranscriptData] = Field(default=None, description="Video transcript in original language")
-    language: Optional[str] = Field(default=None, description="Language code of the transcript (e.g., 'en', 'es', 'fr')")
-    language_name: Optional[str] = Field(default=None, description="Human-readable language name (e.g., 'English', 'Español')")
+    """Transcripts in multiple languages."""
+    original: Optional[TranscriptData] = Field(default=None, description="Video transcript in original language")
+    english: Optional[TranscriptData] = Field(default=None, description="English transcript if available")
+    language: Optional[str] = Field(default=None, description="Language code of the original transcript (e.g., 'en', 'es', 'fr')")
+    language_name: Optional[str] = Field(default=None, description="Human-readable language name of original transcript (e.g., 'English', 'Español')")
     available_languages: List[str] = Field(default_factory=list, description="List of all available transcript languages for this video")
     unavailable_reason: Optional[str] = Field(default=None, description="Reason if transcript is unavailable")
+    
+    # Legacy field for backward compatibility
+    transcript: Optional[TranscriptData] = Field(default=None, description="Legacy field - same as original")
 
 
 class FrameworkData(BaseModel):

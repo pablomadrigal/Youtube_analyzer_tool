@@ -153,17 +153,27 @@ class VideoOrchestrator:
             en_chunks = []
             
             try:
-                if transcripts and transcripts.transcript:
-                    # Use the single transcript with its detected language
-                    language = transcripts.language or 'unknown'
-                    chunks = self.chunker.chunk_transcript(transcripts.transcript, language)
+                if transcripts:
+                    # Process original language transcript
+                    if transcripts.original:
+                        original_language = transcripts.language or 'unknown'
+                        original_chunks = self.chunker.chunk_transcript(transcripts.original, original_language)
+                        es_chunks = original_chunks
+                        log_with_context("info", f"Created {len(original_chunks)} chunks for original language {original_language}")
+                    else:
+                        es_chunks = []
                     
-                    # For backward compatibility, populate both es_chunks and en_chunks with the same content
-                    # The actual language is determined by the transcript's language field
-                    es_chunks = chunks
-                    en_chunks = chunks
-                    
-                    log_with_context("info", f"Created {len(chunks)} chunks for language {language}")
+                    # Process English transcript if available
+                    if transcripts.english:
+                        english_chunks = self.chunker.chunk_transcript(transcripts.english, "en")
+                        en_chunks = english_chunks
+                        log_with_context("info", f"Created {len(english_chunks)} chunks for English")
+                    elif transcripts.original:
+                        # If no English transcript, use original for both
+                        en_chunks = es_chunks
+                        log_with_context("info", f"Using original transcript for English chunks")
+                    else:
+                        en_chunks = []
                 
                 stats.chunking_time = timing.elapsed_seconds
                 return es_chunks, en_chunks
