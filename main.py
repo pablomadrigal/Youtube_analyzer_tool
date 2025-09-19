@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 
 from config import config
-from app_logging import setup_logging, set_request_id, log_with_context
+from app_logging import setup_logging, set_request_id, log_with_context, get_request_id
 from models import AnalysisRequest, AnalysisResponse, JobStatus
 from api.analyze import router
 

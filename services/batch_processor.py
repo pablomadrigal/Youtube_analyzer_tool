@@ -7,9 +7,9 @@ from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime
 
-from app.models import AnalysisOptions, VideoResult, AnalysisResponse, AggregationInfo, ConfigInfo
-from app.logging import log_with_context
-from app.services.orchestrator import video_orchestrator
+from models import AnalysisOptions, VideoResult, AnalysisResponse, AggregationInfo, ConfigInfo
+from app_logging import log_with_context
+from services.orchestrator import video_orchestrator
 
 logger = logging.getLogger(__name__)
 

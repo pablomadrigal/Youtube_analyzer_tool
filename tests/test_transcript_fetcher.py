@@ -5,8 +5,8 @@ import pytest
 from unittest.mock import patch, MagicMock
 from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound, VideoUnavailable, TooManyRequests
 
-from app.services.transcript_fetcher import TranscriptFetcher, transcript_fetcher
-from app.models import TranscriptData, TranscriptSegment, Transcripts, ErrorInfo
+from services.transcript_fetcher import TranscriptFetcher, transcript_fetcher
+from models import TranscriptData, TranscriptSegment, Transcripts, ErrorInfo
 
 
 class TestTranscriptFetcher:

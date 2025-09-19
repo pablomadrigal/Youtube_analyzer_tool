@@ -12,8 +12,8 @@ from youtube_transcript_api._errors import (
     TooManyRequests
 )
 
-from app.models import TranscriptData, TranscriptSegment, Transcripts, ErrorInfo
-from app.logging import log_with_context
+from models import TranscriptData, TranscriptSegment, Transcripts, ErrorInfo
+from app_logging import log_with_context
 
 logger = logging.getLogger(__name__)
 

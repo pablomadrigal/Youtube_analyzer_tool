@@ -3,8 +3,8 @@ Tests for the metadata fetcher.
 """
 import pytest
 from unittest.mock import patch, MagicMock
-from app.services.metadata_fetcher import MetadataFetcher, metadata_fetcher
-from app.models import VideoMetadata, ErrorInfo
+from services.metadata_fetcher import MetadataFetcher, metadata_fetcher
+from models import VideoMetadata, ErrorInfo
 
 
 class TestMetadataFetcher:

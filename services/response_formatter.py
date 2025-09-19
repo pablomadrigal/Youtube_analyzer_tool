@@ -5,8 +5,8 @@ import logging
 from typing import Optional, Dict, Any
 from datetime import datetime
 
-from app.models import VideoResult, VideoMetadata, Transcripts, Summaries, MarkdownFields
-from app.logging import log_with_context
+from models import VideoResult, VideoMetadata, Transcripts, Summaries, MarkdownFields
+from app_logging import log_with_context
 
 logger = logging.getLogger(__name__)
 

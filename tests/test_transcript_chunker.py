@@ -2,10 +2,10 @@
 Tests for the transcript chunker.
 """
 import pytest
-from app.services.transcript_chunker import (
+from services.transcript_chunker import (
     TranscriptChunker, ChunkingConfig, TranscriptChunk, TokenEstimator
 )
-from app.models import TranscriptData, TranscriptSegment
+from models import TranscriptData, TranscriptSegment
 
 
 class TestTokenEstimator:
@@ -260,7 +260,7 @@ class TestGlobalInstances:
     
     def test_default_chunker(self):
         """Test default chunker instance."""
-        from app.services.transcript_chunker import default_chunker
+        from services.transcript_chunker import default_chunker
         
         assert default_chunker is not None
         assert isinstance(default_chunker, TranscriptChunker)
@@ -268,14 +268,14 @@ class TestGlobalInstances:
     
     def test_large_token_chunker(self):
         """Test chunker with large token limit."""
-        from app.services.transcript_chunker import chunker_with_large_tokens
+        from services.transcript_chunker import chunker_with_large_tokens
         
         assert chunker_with_large_tokens is not None
         assert chunker_with_large_tokens.config.max_tokens == 4000
     
     def test_small_token_chunker(self):
         """Test chunker with small token limit."""
-        from app.services.transcript_chunker import chunker_with_small_tokens
+        from services.transcript_chunker import chunker_with_small_tokens
         
         assert chunker_with_small_tokens is not None
         assert chunker_with_small_tokens.config.max_tokens == 1000

@@ -9,9 +9,9 @@ from dataclasses import dataclass
 import litellm
 from litellm import completion
 
-from app.models import SummaryData, Summaries, TranscriptChunk, ErrorInfo
-from app.logging import log_with_context
-from app.config import config
+from models import SummaryData, Summaries, TranscriptChunk, ErrorInfo
+from app_logging import log_with_context
+from config import config
 
 logger = logging.getLogger(__name__)
 

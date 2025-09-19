@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from dataclasses import dataclass, field
 from collections import defaultdict, deque
 
-from app.logging import log_with_context
+from app_logging import log_with_context
 
 logger = logging.getLogger(__name__)
 

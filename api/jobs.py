@@ -5,9 +5,9 @@ import logging
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
 
-from app.models import AnalysisRequest, JobStatus
-from app.logging import get_request_id, log_with_context
-from app.services.job_manager import job_manager
+from models import AnalysisRequest, JobStatus
+from app_logging import get_request_id, log_with_context
+from services.job_manager import job_manager
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["jobs"])
@@ -151,7 +151,7 @@ async def list_jobs():
 
 def _validate_provider_config(provider: str) -> bool:
     """Validate that the provider is properly configured."""
-    from app.config import config
+    from config import config
     
     if provider.startswith("openai/"):
         return config.openai_api_key is not None

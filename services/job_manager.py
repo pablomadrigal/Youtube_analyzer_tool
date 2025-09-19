@@ -8,9 +8,9 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 from enum import Enum
 
-from app.models import AnalysisRequest, AnalysisResponse, JobStatus, VideoResult, ErrorInfo
-from app.logging import log_with_context
-from app.services.batch_processor import default_batch_processor
+from models import AnalysisRequest, AnalysisResponse, JobStatus, VideoResult, ErrorInfo
+from app_logging import log_with_context
+from services.batch_processor import default_batch_processor
 
 logger = logging.getLogger(__name__)
 

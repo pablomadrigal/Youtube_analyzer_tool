@@ -5,10 +5,10 @@ import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 import json
 
-from app.services.summarization_service import (
+from services.summarization_service import (
     SummarizationService, SummarizationConfig, PromptTemplates
 )
-from app.models import SummaryData, Summaries, TranscriptChunk, ErrorInfo
+from models import SummaryData, Summaries, TranscriptChunk, ErrorInfo
 
 
 class TestPromptTemplates:
@@ -315,7 +315,7 @@ class TestGlobalInstances:
     
     def test_default_summarizer(self):
         """Test default summarizer instance."""
-        from app.services.summarization_service import default_summarizer
+        from services.summarization_service import default_summarizer
         
         assert default_summarizer is not None
         assert isinstance(default_summarizer, SummarizationService)
@@ -323,14 +323,14 @@ class TestGlobalInstances:
     
     def test_high_temp_summarizer(self):
         """Test high temperature summarizer."""
-        from app.services.summarization_service import summarizer_with_high_temp
+        from services.summarization_service import summarizer_with_high_temp
         
         assert summarizer_with_high_temp is not None
         assert summarizer_with_high_temp.config.temperature == 0.7
     
     def test_low_temp_summarizer(self):
         """Test low temperature summarizer."""
-        from app.services.summarization_service import summarizer_with_low_temp
+        from services.summarization_service import summarizer_with_low_temp
         
         assert summarizer_with_low_temp is not None
         assert summarizer_with_low_temp.config.temperature == 0.1

@@ -6,8 +6,8 @@ import re
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 
-from app.models import TranscriptData, TranscriptSegment
-from app.logging import log_with_context
+from models import TranscriptData, TranscriptSegment
+from app_logging import log_with_context
 
 logger = logging.getLogger(__name__)
 

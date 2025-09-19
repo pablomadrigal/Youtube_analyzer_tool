@@ -8,8 +8,8 @@ from urllib.parse import urlparse, parse_qs
 import yt_dlp
 from datetime import datetime
 
-from app.models import VideoMetadata, ErrorInfo
-from app.logging import log_with_context
+from models import VideoMetadata, ErrorInfo
+from app_logging import log_with_context
 
 logger = logging.getLogger(__name__)
 

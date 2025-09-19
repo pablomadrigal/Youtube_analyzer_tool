@@ -5,9 +5,9 @@ import logging
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
-from app.logging import get_request_id, log_with_context
-from app.services.observability import observability_service
-from app.services.job_manager import job_manager
+from app_logging import get_request_id, log_with_context
+from services.observability import observability_service
+from services.job_manager import job_manager
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["monitoring"])
@@ -177,7 +177,7 @@ async def get_status():
     request_id = get_request_id()
     
     try:
-        from app.config import config
+        from config import config
         
         status_info = {
             "service": "youtube-analyzer",
